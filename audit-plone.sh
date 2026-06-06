@@ -38,10 +38,17 @@ _run_anim() {
   local log="$1"; shift
   "$@" > "$log" 2>&1 &
   local _PID=$!
-  _build_anim "$_PID" &
-  local _ANIM_PID=$!
+
+  local _ANIM_PID=""
+  if [ -t 1 ] && [ -w /dev/tty ] 2>/dev/null; then
+    _build_anim "$_PID" &
+    _ANIM_PID=$!
+  fi
+
   wait $_PID && _EXIT=0 || _EXIT=$?
-  kill $_ANIM_PID 2>/dev/null || true; wait $_ANIM_PID 2>/dev/null || true
+  if [ -n "$_ANIM_PID" ]; then
+    kill $_ANIM_PID 2>/dev/null || true; wait $_ANIM_PID 2>/dev/null || true
+  fi
   return $_EXIT
 }
 
