@@ -108,9 +108,13 @@ _check_lockfile() {
   fi
 
   local log="/tmp/audit_lock_$$.log"
-  _info "Verificando hashes (frozen-lockfile dry-run)…"
+  _info "Verificando consistencia lockfile ↔ package.json…"
 
-  if _run_anim "$log" pnpm --dir "${FRONTEND_DIR}" install --frozen-lockfile --dry-run; then
+  # --lockfile-only evita descargar/instalar paquetes; --frozen-lockfile falla
+  # si package.json y pnpm-lock.yaml no coinciden, sin modificar nada.
+  # Se usa "cd" en vez de "--dir" porque corepack resuelve la versión de pnpm
+  # pinneada (campo packageManager) según el cwd, no según --dir.
+  if _run_anim "$log" bash -c 'cd "$1" && pnpm install --frozen-lockfile --lockfile-only' _ "${FRONTEND_DIR}"; then
     _ok "Lockfile íntegro — sin modificaciones detectadas"
   else
     _fail "El lockfile no coincide con package.json o fue modificado"
@@ -128,7 +132,9 @@ _check_audit() {
   _info "Escaneando dependencias contra base de datos de CVEs…"
 
   local exit_code=0
-  _run_anim "$log" pnpm --dir "${FRONTEND_DIR}" audit --audit-level=high --json || exit_code=$?
+  # cd (no --dir) para que corepack resuelva la versión pinneada de pnpm;
+  # stderr se descarta para no contaminar el JSON que va a stdout/$log
+  _run_anim "$log" bash -c 'cd "$1" && pnpm audit --audit-level=high --json 2>/dev/null' _ "${FRONTEND_DIR}" || exit_code=$?
 
   if [[ $exit_code -eq 0 ]]; then
     _ok "Sin vulnerabilidades HIGH o CRITICAL"
