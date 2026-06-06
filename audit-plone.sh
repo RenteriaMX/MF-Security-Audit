@@ -47,7 +47,11 @@ _run_anim() {
 
   wait $_PID && _EXIT=0 || _EXIT=$?
   if [ -n "$_ANIM_PID" ]; then
+    # SIGTERM mata el proceso de animación a media espera (sleep), por lo que
+    # su propia limpieza de línea nunca se ejecuta — se repite aquí para
+    # garantizar que la línea quede en blanco antes de imprimir el resultado.
     kill $_ANIM_PID 2>/dev/null || true; wait $_ANIM_PID 2>/dev/null || true
+    printf "\r%60s\r" "" > /dev/tty 2>/dev/null || true
   fi
   return $_EXIT
 }
