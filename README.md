@@ -10,13 +10,6 @@ Script de auditoría de cadena de suministro (supply chain) para proyectos
 curl -fsSL https://raw.githubusercontent.com/RenteriaMX/MF-Security-Audit/main/audit-plone.sh | bash
 ```
 
-O clonando el repo:
-
-```bash
-git clone git@github.com:RenteriaMX/MF-Security-Audit.git
-./MF-Security-Audit/audit-plone.sh /ruta/a/frontend
-```
-
 ### Detección del proyecto
 
 El script detecta el directorio frontend en este orden:
