@@ -296,10 +296,65 @@ _check_typosquatting() {
 # Solo corren si la herramienta ya está instalada (y autenticada, cuando
 # aplica). Si no está disponible se omite con una nota — no afecta el
 # resultado del script ni requiere configuración previa.
+# Pregunta al usuario si quiere descargar el binario oficial de osv-scanner
+# (sin sudo, cacheado en ~/.cache/audit-plone) y lo usa solo para esta corrida.
+# Solo aplica si hay terminal interactiva — en pipes/CI simplemente se omite.
+_maybe_install_osv_scanner() {
+  local cache_dir="${HOME}/.cache/audit-plone"
+  local bin="${cache_dir}/osv-scanner"
+  [[ -x "$bin" ]] && { printf "%s" "$bin"; return 0; }
+
+  [[ -t 0 && -r /dev/tty ]] || return 1
+
+  printf "  ${DIM}osv-scanner no instalado.${RST}\n" > /dev/tty
+  printf "  ${YEL}¿Descargar el binario oficial (sin sudo, cacheado en ~/.cache) para incluirlo en este análisis? [s/N]:${RST} " > /dev/tty
+  local resp=""
+  read -r resp < /dev/tty || resp=""
+  [[ "$resp" =~ ^[sSyY] ]] || return 1
+
+  local os arch
+  case "$(uname -s)" in
+    Linux)  os="linux" ;;
+    Darwin) os="darwin" ;;
+    *) return 1 ;;
+  esac
+  case "$(uname -m)" in
+    x86_64|amd64)  arch="amd64" ;;
+    arm64|aarch64) arch="arm64" ;;
+    *) return 1 ;;
+  esac
+
+  local url
+  url=$(curl -fsSL "https://api.github.com/repos/google/osv-scanner/releases/latest" 2>/dev/null \
+    | grep -o "\"browser_download_url\": *\"[^\"]*${os}_${arch}[^\"]*\"" \
+    | head -1 | sed -E 's/.*"(https[^"]+)"/\1/')
+  if [[ -z "$url" ]]; then
+    printf "  ${YEL}⚠${RST}  No se encontró binario de osv-scanner para ${os}_${arch}\n" > /dev/tty
+    return 1
+  fi
+
+  mkdir -p "$cache_dir"
+  printf "  ${DIM}→${RST} Descargando osv-scanner (${os}_${arch})…\n" > /dev/tty
+  if curl -fsSL "$url" -o "$bin" 2>/dev/null && chmod +x "$bin"; then
+    printf "  ${GRN}✓${RST} osv-scanner instalado en ${bin}\n" > /dev/tty
+    printf "%s" "$bin"
+    return 0
+  else
+    rm -f "$bin"
+    printf "  ${YEL}⚠${RST}  Falló la descarga de osv-scanner\n" > /dev/tty
+    return 1
+  fi
+}
+
 _check_osv_scanner() {
-  if ! command -v osv-scanner &>/dev/null; then
-    _info "osv-scanner no instalado — omitiendo (https://github.com/google/osv-scanner)"
-    return
+  local bin
+  if command -v osv-scanner &>/dev/null; then
+    bin="osv-scanner"
+  else
+    bin=$(_maybe_install_osv_scanner) || {
+      _info "osv-scanner no disponible — omitiendo (https://github.com/google/osv-scanner)"
+      return
+    }
   fi
 
   local lockfile="${FRONTEND_DIR}/pnpm-lock.yaml"
@@ -310,7 +365,7 @@ _check_osv_scanner() {
 
   local exit_code=0
   # stderr se descarta: osv-scanner escribe progreso ahí y contamina el JSON
-  _run_anim "$log" bash -c 'osv-scanner scan source -L "$1" --format json 2>/dev/null' _ "$lockfile" || exit_code=$?
+  _run_anim "$log" bash -c '"$0" scan source -L "$1" --format json 2>/dev/null' "$bin" "$lockfile" || exit_code=$?
 
   if [[ $exit_code -eq 0 ]]; then
     _ok "OSV-Scanner: sin vulnerabilidades conocidas"
