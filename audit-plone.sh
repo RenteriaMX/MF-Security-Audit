@@ -56,7 +56,14 @@ _bump_crit() { ((CRITS++)) || true; }
 # ─── Detect frontend directory ────────────────────────────────────────────────
 _detect_frontend() {
   if [[ -n "${1:-}" ]]; then
-    FRONTEND_DIR="$1"
+    # La ruta puede ser la raíz del proyecto o ya el frontend; probar ambas
+    if [[ -f "$1/package.json" ]]; then
+      FRONTEND_DIR="$1"
+    elif [[ -f "$1/frontend/package.json" ]]; then
+      FRONTEND_DIR="$1/frontend"
+    else
+      FRONTEND_DIR="$1"
+    fi
   elif [[ -n "${PLONE_BASE:-}" ]]; then
     # PLONE_BASE apunta a la raíz del proyecto; frontend suele estar en frontend/
     if [[ -d "${PLONE_BASE}/frontend" ]]; then
