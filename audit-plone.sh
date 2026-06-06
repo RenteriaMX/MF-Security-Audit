@@ -377,6 +377,24 @@ _check_osv_scanner() {
     if [[ "$count" != "?" && "$count" -gt 0 ]]; then
       _warn "OSV-Scanner: ${count} vulnerabilidad(es) (puede solaparse con pnpm audit — revisar IDs)"
       _bump_warn
+      jq -r '
+        def sevlabel: if . >= 9 then "CRITICAL" elif . >= 7 then "HIGH" elif . >= 4 then "MODERATE" else "LOW" end;
+        [.results[]?.packages[]? | {
+          name: .package.name, version: .package.version,
+          sev: ((.groups[0].max_severity // "0") | tonumber? // 0),
+          id: (.groups[0].ids[0] // "?"),
+          summary: (.vulnerabilities[0].summary // "")
+        }]
+        | unique_by(.id) | sort_by(-.sev) | .[]
+        | "\(.sev|sevlabel)|\(.name)@\(.version)|\(.id)|\(.summary)"
+      ' "$log" 2>/dev/null | while IFS='|' read -r label pkg id summary; do
+        local color="$DIM"
+        case "$label" in
+          CRITICAL|HIGH) color="$RED" ;;
+          MODERATE)      color="$YEL" ;;
+        esac
+        printf "    ${color}%-9s${RST} %-22s %s — %s\n" "$label" "$pkg" "$id" "$summary"
+      done
     fi
   else
     _warn "OSV-Scanner reportó hallazgos — revisa: $log"
