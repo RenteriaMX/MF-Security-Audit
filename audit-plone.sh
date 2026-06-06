@@ -292,6 +292,107 @@ _check_typosquatting() {
   [[ $volto_count -gt 0 ]] && _info "Paquetes @plone/ / @plonegovbr/ / volto-* verificados: ${volto_count}"
 }
 
+# ─── Extra: análisis complementario con herramientas opcionales ──────────────
+# Solo corren si la herramienta ya está instalada (y autenticada, cuando
+# aplica). Si no está disponible se omite con una nota — no afecta el
+# resultado del script ni requiere configuración previa.
+_check_osv_scanner() {
+  if ! command -v osv-scanner &>/dev/null; then
+    _info "osv-scanner no instalado — omitiendo (https://github.com/google/osv-scanner)"
+    return
+  fi
+
+  local lockfile="${FRONTEND_DIR}/pnpm-lock.yaml"
+  [[ -f "$lockfile" ]] || return
+
+  local log="/tmp/audit_osv_$$.log"
+  _info "OSV-Scanner: consultando base de datos OSV.dev…"
+
+  local exit_code=0
+  # stderr se descarta: osv-scanner escribe progreso ahí y contamina el JSON
+  _run_anim "$log" bash -c 'osv-scanner scan source -L "$1" --format json 2>/dev/null' _ "$lockfile" || exit_code=$?
+
+  if [[ $exit_code -eq 0 ]]; then
+    _ok "OSV-Scanner: sin vulnerabilidades conocidas"
+  elif command -v jq &>/dev/null && [[ -s "$log" ]]; then
+    local count
+    count=$(jq -r '[.results[]?.packages[]?.vulnerabilities[]?.id] | unique | length' "$log" 2>/dev/null || echo "?")
+    if [[ "$count" != "?" && "$count" -gt 0 ]]; then
+      _warn "OSV-Scanner: ${count} vulnerabilidad(es) (puede solaparse con pnpm audit — revisar IDs)"
+      _bump_warn
+    fi
+  else
+    _warn "OSV-Scanner reportó hallazgos — revisa: $log"
+    _bump_warn
+  fi
+  rm -f "$log"
+}
+
+_check_socket() {
+  if ! command -v socket &>/dev/null; then
+    _info "socket (Socket.dev) no instalado — omitiendo (npm i -g socket)"
+    return
+  fi
+  if [[ -z "${SOCKET_SECURITY_API_KEY:-}" ]]; then
+    _info "socket instalado pero sin SOCKET_SECURITY_API_KEY — omitiendo análisis completo"
+    return
+  fi
+
+  local log="/tmp/audit_socket_$$.log"
+  _info "Socket.dev: analizando comportamiento de paquetes…"
+
+  local exit_code=0
+  _run_anim "$log" socket scan create --json "${FRONTEND_DIR}" || exit_code=$?
+
+  if [[ $exit_code -eq 0 ]]; then
+    _ok "Socket.dev: sin alertas de comportamiento malicioso"
+  else
+    _warn "Socket.dev reportó alertas — revisa: $log"
+    _bump_warn
+  fi
+  rm -f "$log"
+}
+
+_check_snyk() {
+  if ! command -v snyk &>/dev/null; then
+    _info "snyk no instalado — omitiendo (npm i -g snyk)"
+    return
+  fi
+  if ! snyk whoami &>/dev/null; then
+    _info "snyk instalado pero no autenticado (ejecuta 'snyk auth') — omitiendo"
+    return
+  fi
+
+  local log="/tmp/audit_snyk_$$.log"
+  _info "Snyk: escaneando dependencias…"
+
+  local exit_code=0
+  # stderr se descarta: snyk escribe progreso ahí y contamina el JSON
+  _run_anim "$log" bash -c 'cd "$1" && snyk test --severity-threshold=high --json 2>/dev/null' _ "${FRONTEND_DIR}" || exit_code=$?
+
+  if [[ $exit_code -eq 0 ]]; then
+    _ok "Snyk: sin vulnerabilidades HIGH/CRITICAL"
+  elif command -v jq &>/dev/null && [[ -s "$log" ]]; then
+    local count
+    count=$(jq -r '[.vulnerabilities[]?] | length' "$log" 2>/dev/null || echo "?")
+    if [[ "$count" != "?" && "$count" -gt 0 ]]; then
+      _warn "Snyk: ${count} vulnerabilidad(es) HIGH/CRITICAL (puede solaparse con pnpm audit)"
+      _bump_warn
+    fi
+  else
+    _warn "Snyk reportó hallazgos — revisa: $log"
+    _bump_warn
+  fi
+  rm -f "$log"
+}
+
+_check_extra_tools() {
+  _hdr "Análisis complementario (opcional)"
+  _check_osv_scanner
+  _check_socket
+  _check_snyk
+}
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 _summary() {
   printf "\n${BOLD}${CYN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
@@ -326,6 +427,7 @@ main() {
   _check_audit
   _check_postinstall
   _check_typosquatting
+  _check_extra_tools
   _summary
 }
 
