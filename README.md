@@ -31,6 +31,54 @@ PLONE_BASE=/srv/mi-proyecto-plone ./audit-plone.sh
 | 3 | Scripts `postinstall` sospechosos en `node_modules` (filtrados contra whitelist de paquetes nativos conocidos: esbuild, sharp, canvas, node-gyp, etc.) | búsqueda en `package.json` |
 | 4 | Typosquatting básico de paquetes Volto/Plone (`@plone/`, `@plonegovbr/`, `volto-`) — detecta sustituciones de caracteres tipo `v0lto`, `@pl0ne/`, prefijos sin scope, etc. | comparación de nombres en `package.json` |
 
+## Análisis complementario (opcional)
+
+Después de los 4 checks principales, el script intenta correr un análisis
+extra con herramientas externas — **solo si están disponibles**, sin afectar
+el resultado si no lo están:
+
+| Herramienta | Comportamiento |
+|---|---|
+| **OSV-Scanner** (Google) | Si no está instalado y hay terminal interactiva, **pregunta si deseas descargarlo** (ver flujo abajo). Escanea `pnpm-lock.yaml` contra la base de datos pública [OSV.dev](https://osv.dev) |
+| **Socket.dev (`socket`)** | Solo corre si está instalado **y** la variable `SOCKET_SECURITY_API_KEY` está configurada. De lo contrario se omite con una nota |
+| **Snyk (`snyk`)** | Solo corre si está instalado **y** autenticado (`snyk whoami`). De lo contrario se omite con una nota — Snyk requiere `snyk auth` (cuenta vinculada vía navegador), que no se puede automatizar desde el script |
+
+### Flujo de instalación de OSV-Scanner
+
+Si `osv-scanner` no está instalado y el script detecta una terminal real
+(funciona incluso vía `curl | bash`, porque escribe/lee directo en `/dev/tty`
+en vez de depender de stdin), pregunta:
+
+```
+osv-scanner no instalado.
+¿Descargar el binario oficial (sin sudo, cacheado en ~/.cache) para incluirlo en este análisis? [s/N]:
+```
+
+- **`s` / `y`** → detecta tu OS/arquitectura, descarga el binario oficial desde
+  los releases de GitHub (sin `sudo`), lo guarda en `~/.cache/audit-plone/` y
+  lo usa de inmediato. Corridas futuras lo reutilizan sin volver a preguntar.
+- **`n` / Enter** → omite el check sin descargar nada.
+- **Modo no interactivo** (CI, pipes sin terminal real) → omite directamente,
+  sin preguntar.
+
+Para pre-instalarlo tú mismo y evitar el prompt: sigue las instrucciones en
+[github.com/google/osv-scanner](https://github.com/google/osv-scanner#installation).
+
+### Ejemplo de salida real
+
+```
+━━ Análisis complementario (opcional)
+  → OSV-Scanner: consultando base de datos OSV.dev…
+  ⚠  OSV-Scanner: 8 vulnerabilidad(es) (puede solaparse con pnpm audit — revisar IDs)
+```
+
+OSV-Scanner reporta el **conteo de IDs únicos de vulnerabilidades** encontradas
+en el lockfile. Es normal que se solape parcialmente con los hallazgos del
+check 2 (`pnpm audit`) — ambos analizan la misma cadena de dependencias contra
+bases de datos distintas (npm advisories vs. OSV.dev), así que un mismo CVE
+puede aparecer en ambos reportes con IDs diferentes. Considera ambos como
+**dos vistas de la misma cadena**, no como hallazgos independientes que se suman.
+
 ## Salida
 
 Al final se muestra un resumen y el script retorna un código de salida apto
