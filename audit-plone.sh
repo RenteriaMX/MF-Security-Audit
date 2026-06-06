@@ -304,7 +304,9 @@ _maybe_install_osv_scanner() {
   local bin="${cache_dir}/osv-scanner"
   [[ -x "$bin" ]] && { printf "%s" "$bin"; return 0; }
 
-  [[ -t 0 && -r /dev/tty ]] || return 1
+  # No usar "-t 0": en "curl | bash" stdin es el pipe de curl, no la terminal.
+  # /dev/tty es la terminal controladora real, accesible aunque stdin esté tomado.
+  [[ -r /dev/tty && -w /dev/tty ]] 2>/dev/null || return 1
 
   printf "  ${DIM}osv-scanner no instalado.${RST}\n" > /dev/tty
   printf "  ${YEL}¿Descargar el binario oficial (sin sudo, cacheado en ~/.cache) para incluirlo en este análisis? [s/N]:${RST} " > /dev/tty
