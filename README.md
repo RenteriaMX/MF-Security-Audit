@@ -7,12 +7,6 @@ Script de auditoría de cadena de suministro (supply chain) para proyectos
 ## Uso rápido
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RenteriaMX/MF-Security-Audit/main/audit-plone.sh | bash
-```
-
-Indicando la ruta del frontend directamente:
-
-```bash
 curl -fsSL https://raw.githubusercontent.com/RenteriaMX/MF-Security-Audit/main/audit-plone.sh | bash -s /opt/plone/mi-proyecto
 ```
 
