@@ -69,21 +69,24 @@ Para pre-instalarlo tú mismo y evitar el prompt: sigue las instrucciones en
 ```
 ━━ Análisis complementario (opcional)
   → OSV-Scanner: consultando base de datos OSV.dev…
-  ⚠  OSV-Scanner: 8 vulnerabilidad(es) (puede solaparse con pnpm audit — revisar IDs)
-    CRITICAL  vitest@3.2.6           GHSA-5xrq-8626-4rwp — When Vitest UI server is listening, arbitrary file can be read and executed
-    HIGH      uuid@8.3.2             GHSA-w5hq-g745-h8pq — uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided
-    MODERATE  undici@6.23.0          GHSA-2mjp-6q6p-2qxm — Undici has an HTTP Request/Response Smuggling issue
-    MODERATE  qs@6.14.2              GHSA-q8mj-m7cp-5q26 — qs has a remotely triggerable DoS: qs.stringify crashes with TypeError on null/undefined entries in comma-format arrays when encodeValuesOnly is set
+  ⚠  OSV-Scanner: 4 vulnerabilidad(es) (puede solaparse con pnpm audit — revisar IDs)
+    CRITICAL  vitest@3.2.6  GHSA-5xrq-8626-4rwp — When Vitest UI server is listening, arbitrary file can be read and executed
+    HIGH      uuid@8.3.2  GHSA-w5hq-g745-h8pq — uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided
+    MODERATE  undici@6.23.0  GHSA-2mjp-6q6p-2qxm — Undici has an HTTP Request/Response Smuggling issue
+    MODERATE  qs@6.14.2  GHSA-q8mj-m7cp-5q26 — qs has a remotely triggerable DoS: qs.stringify crashes with TypeError on null/undefined entries in comma-format arrays when encodeValuesOnly is set
 ```
 
 OSV-Scanner reporta el **conteo de IDs únicos de vulnerabilidades** encontradas
-en el lockfile y, junto con el conteo, el **detalle de cada una** — paquete,
-severidad (clasificada a partir del puntaje CVSS de OSV.dev), ID de la
-advisory y descripción. Es normal que se solape parcialmente con los hallazgos
-del check 2 (`pnpm audit`) — ambos analizan la misma cadena de dependencias
-contra bases de datos distintas (npm advisories vs. OSV.dev), así que un mismo
-CVE puede aparecer en ambos reportes con IDs diferentes. Considera ambos como
-**dos vistas de la misma cadena**, no como hallazgos independientes que se suman.
+en el lockfile y, debajo, una línea por cada una de esas mismas vulnerabilidades
+— paquete, severidad, ID de la advisory y descripción. La severidad se deriva
+del puntaje CVSS que OSV.dev asocia al hallazgo; cuando esa información no
+viene incluida en el reporte se etiqueta como `UNKNOWN` (en vez de asumir un
+nivel bajo que podría ocultar un hallazgo serio). Es normal que se solape
+parcialmente con los hallazgos del check 2 (`pnpm audit`) — ambos analizan la
+misma cadena de dependencias contra bases de datos distintas (npm advisories
+vs. OSV.dev), así que un mismo CVE puede aparecer en ambos reportes con IDs
+diferentes. Considera ambos como **dos vistas de la misma cadena**, no como
+hallazgos independientes que se suman.
 
 ## Salida
 

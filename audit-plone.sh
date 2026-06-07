@@ -372,29 +372,47 @@ _check_osv_scanner() {
   if [[ $exit_code -eq 0 ]]; then
     _ok "OSV-Scanner: sin vulnerabilidades conocidas"
   elif command -v jq &>/dev/null && [[ -s "$log" ]]; then
-    local count
-    count=$(jq -r '[.results[]?.packages[]?.vulnerabilities[]?.id] | unique | length' "$log" 2>/dev/null || echo "?")
-    if [[ "$count" != "?" && "$count" -gt 0 ]]; then
-      _warn "OSV-Scanner: ${count} vulnerabilidad(es) (puede solaparse con pnpm audit — revisar IDs)"
-      _bump_warn
-      jq -r '
-        def sevlabel: if . >= 9 then "CRITICAL" elif . >= 7 then "HIGH" elif . >= 4 then "MODERATE" else "LOW" end;
-        [.results[]?.packages[]? | {
-          name: .package.name, version: .package.version,
-          sev: ((.groups[0].max_severity // "0") | tonumber? // 0),
-          id: (.groups[0].ids[0] // "?"),
-          summary: (.vulnerabilities[0].summary // "")
-        }]
-        | unique_by(.id) | sort_by(-.sev) | .[]
-        | "\(.sev|sevlabel)|\(.name)@\(.version)|\(.id)|\(.summary)"
-      ' "$log" 2>/dev/null | while IFS='|' read -r label pkg id summary; do
-        local color="$DIM"
-        case "$label" in
-          CRITICAL|HIGH) color="$RED" ;;
-          MODERATE)      color="$YEL" ;;
-        esac
-        printf "    ${color}%-9s${RST} %-22s %s — %s\n" "$label" "$pkg" "$id" "$summary"
-      done
+    # Una sola pasada: cuenta y detalle comparten la misma clave de unicidad
+    # (vulnerabilities[].id) para que no se contradigan entre sí. El color y
+    # la etiqueta de severidad se resuelven dentro de jq (sin duplicar el
+    # mapeo en bash) y se emiten ya formateados — así basta con `|| true`
+    # para blindar el pipeline contra `set -euo pipefail` sin pasar por un
+    # `while read` que podría abortar todo el script si jq falla.
+    local output
+    output=$(jq -r '
+      def sevinfo(n):
+        if   n == null then ["UNKNOWN",  "[2;37m"]
+        elif n >= 9     then ["CRITICAL", "[1;31m"]
+        elif n >= 7     then ["HIGH",     "[1;31m"]
+        elif n >= 4     then ["MODERATE", "[1;33m"]
+        else                 ["LOW",      "[2;37m"]
+        end;
+      ( [.results[]?.packages[]?.vulnerabilities[]?.id] | unique ) as $ids
+      | ($ids | length) as $count
+      | (
+          [ .results[]?.packages[]? | . as $pkg
+            | ($pkg.groups // []) as $groups
+            | $pkg.vulnerabilities[]? | . as $vuln
+            | { id: $vuln.id,
+                pkgver: ($pkg.package.name + "@" + $pkg.package.version),
+                summary: ($vuln.summary // ""),
+                sev: ([ $groups[] | select((.ids // []) | index($vuln.id)) | (.max_severity | tonumber?) ] | first)
+              }
+          ] | unique_by(.id) | sort_by(-(.sev // -1))
+        ) as $items
+      | $count,
+        ( $items[] | (.sev | sevinfo(.)) as $si |
+          "    " + $si[1] + $si[0] + "[0m  " + .pkgver + "  " + .id + " — " + .summary )
+    ' "$log" 2>/dev/null) || true
+
+    if [[ -n "$output" ]]; then
+      local count
+      count=$(head -n1 <<< "$output")
+      if [[ "$count" =~ ^[0-9]+$ && "$count" -gt 0 ]]; then
+        _warn "OSV-Scanner: ${count} vulnerabilidad(es) (puede solaparse con pnpm audit — revisar IDs)"
+        _bump_warn
+        tail -n +2 <<< "$output"
+      fi
     fi
   else
     _warn "OSV-Scanner reportó hallazgos — revisa: $log"
